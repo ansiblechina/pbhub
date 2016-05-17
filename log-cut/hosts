@@ -1,0 +1,3 @@
+[tomcat]
+1.1.1.1 state=product
+2.2.2.2 state=dev          # dev¾ÍÊÇftp server

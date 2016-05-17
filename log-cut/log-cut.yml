@@ -1,0 +1,50 @@
+---
+
+#
+#e.g. ansible-playbook log-cut.yml   --extra-vars="group=tomcat dever=zhangsan"
+
+  - hosts: "{{ group }}"                                           # 主机组
+    remote_user: ansible                         
+    sudo: yes
+
+    vars: 
+      start_time: "2016-04-08 09:0[0-9]:"                         # 需要截取日志的开始日期和时间
+      end_time: "2016-04-08 09:10:"                               # 需要截取日志的结束日期和时间
+      log_file: "/opt/tomcat/logs/catalina.out"                   # 日志具体路径
+      store_path: "/store"                                        # 截取后的日志存放路径
+      ftp_path: "/opt/logdir"
+
+    tasks:
+      - name: Remove old log fil
+        file: path=/tmp/{{ inventory_hostname }}_{{ group }}_{{ dever }}.log state=absent
+        when: state == "product"
+        
+      - name: Cut file from log file
+        shell: sed -n '/^{{ start_time }}/,/^{{ end_time }}/p' {{ log_file }} >> /tmp/{{ inventory_hostname }}_{{ group }}_{{ dever }}.log
+        when: state == "product"
+
+      - name: Download log files from remote
+        synchronize: src=/tmp/{{ inventory_hostname }}_{{ group }}_{{ dever }}.log dest={{ store_path }}/{{ inventory_hostname }}_{{ group }}_{{ dever }}.log mode=pull
+        when: state == "product"
+
+      - name: Archive log file
+        local_action: shell chdir={{ store_path }}/ zip {{ group }}_{{ dever }}.zip *.log
+        register: rc
+        
+      - name: Make a date as tag
+        shell: date +%Y-%m-%d-%H-%M
+        register: tag
+        run_once: true
+      
+      - name: Create Directory
+        file: path={{ ftp_path }}/{{ tag.stdout }}_{{ dever }} state=directory
+        when: state == "dev"
+
+      - name: Copy log to FTP server
+        local_action: synchronize src={{ store_path }}/{{ group }}_{{ dever }}.zip dest={{ ftp_path }}/{{ tag.stdout }}_{{ dever }}/{{ group }}_{{ dever }}.zip
+        when: state == "dev"
+      
+      - name: Delete old file
+        local_action: file path={{ item }} state=absent
+        with_fileglob:
+          - "{{ store_path }}/*"
